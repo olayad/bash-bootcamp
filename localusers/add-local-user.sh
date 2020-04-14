@@ -28,3 +28,4 @@ echo "New account created: ${USERNAME} - ${PASSWORD} at ${HOSTNAME}"
 
 # force password to reset after first login
 passwd -e ${USERNAME}
+exit 0
