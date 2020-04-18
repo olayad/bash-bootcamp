@@ -12,17 +12,20 @@ then
 	exit 1
 fi
 
+DELETE=false;
+REMOVE_HOME=false;
+ARCHIVE=false
 while getopts "dra" OPTION
 do
   case ${OPTION} in
 	d )
-	  echo "Deleting account..."
+	  DELETE=true
 	  ;;
 	r )
-	  echo "Removing home directory..."
+	  REMOVE_HOME=true
 	  ;;
 	a )
-	  echo "Creating home directory archive..."
+	  ARCHIVE=true
 	  ;;
 	? )
 	  usage
@@ -50,12 +53,23 @@ do
   	echo "Could NOT find user ${USER} in the system."
   fi	
   
-  #if [[ "${?}" -ne 0 ]] && [[ ${ID} -lt 1000 ]]
   if [[ ! -z "${ID}" ]] && [[ ${ID} -lt 1000 ]]
   then
-	# echo "ID string is empty"
   	echo "Cannot delete system account, skipping user ${USER} deletion with id: ${ID}"
   fi 
+
+  if [[ ARCHIVE ]]
+  then
+	echo "Archiving home..."
+	tar -zcvf ${USER}.tar.gz /home/${USER}/
+	if [[ "${?}" -ne 0 ]]
+	then
+		echo "Error occurred creating archive, skipping user: ${USER} deletion"
+		shift
+		continue
+	fi
+  fi
+  #userdel ${USER}
 
   shift 
 done
