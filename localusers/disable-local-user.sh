@@ -1,9 +1,15 @@
 #!/bin/bash
 
-# Deletes user from system
+# This script disables, deletes and/or archives users on the local system.
+
+ARCHIVE_DIR='/archive'
 
 usage () {
-	echo "Usage: ${0} USERNAME" >&2
+	echo "Usage: ${0} [-dra] USERNAME [USERN]..." >&2
+	echo "Disables a local lunux account." >&2
+	echo "  -d 	Deletes accounts instead of disabling them." >&2
+	echo "  -r 	Removes the home directory associated with the account(s)." >&2
+	echo "  -a 	Creates home directory archive and stores in ${ARCHIVE_DIR}." >&2
 	exit 1
 }
 
@@ -13,24 +19,14 @@ then
 	exit 1
 fi
 
-DELETE=false;
-REMOVE_HOME=false;
-ARCHIVE=false
+# Parse options
 while getopts "dra" OPTION
 do
   case ${OPTION} in
-	d )
-	  DELETE=true
-	  ;;
-	r )
-	  REMOVE_HOME=true
-	  ;;
-	a )
-	  ARCHIVE=true
-	  ;;
-	? )
-	  usage
-	  ;;
+	d) DELETE='true' ;;
+	r) REMOVE_HOME='-r' ;;
+	a) ARCHIVE='true' ;;
+	?) usage ;;
 	esac
 done
 
@@ -44,83 +40,72 @@ fi
 
 
 # Processing user list
-while [[ "${#}" -gt 0 ]]
+for USER in "${@}"
 do
   echo
-  USER=${1}
   ID=$(id -u ${USER} 2>/dev/null)
   if [[ "${?}" -ne 0 ]]
   then
   	echo "Could NOT find user ${USER} in the system."
-  	shift
 	continue
   fi	
   
   if [[ ! -z "${ID}" ]] && [[ ${ID} -lt 1000 ]]
   then
   	echo "Cannot delete system account, skipping user ${USER} deletion with id: ${ID}"
-  	shift
 	continue
   fi 
 
 
-  if [[ "${ARCHIVE}" = true ]]
+  if [[ "${ARCHIVE}" = 'true' ]]
   then
-	if [[ ! -d /archives ]]
+	if [[ ! -d ${ARCHIVE_DIR} ]]
 	then
-		mkdir /archives
+		mkdir -p ${ARCHIVE_DIR}
 	fi
-	echo "Archiving home for user: ${USER}..."
-	tar -zcvf /archives/${USER}.tar.gz /home/${USER}/ &>/dev/null
 	if [[ "${?}" -ne 0 ]]
 	then
-		echo "Error occurred creating archive, skipping user: ${USER} deletion"
-		shift
-		continue
+		echo "The archive dir ${ARCHIVE_DIR} could not be created." &>2
+		exit 1
 	fi
+
+	# Archive the user's home dir and move it to into the ARCHIVE_DIR
+	HOME_DIR="/home/${USER}"
+	ARCHIVE_FILE="${ARCHIVE_DIR}/${USER}.tgz"
+	if [[ -d "${HOME_DIR}" ]]
+	then
+		echo "Archiving home for user: ${USER}..."
+		tar -zcvf ${ARCHIVE_FILE} ${HOME_DIR}/ &>/dev/null
+		if [[ "${?}" -ne 0 ]]
+		then
+			echo "Error occurred creating archive ${ARCHIVE_FILE}."
+			exit 1	
+		fi
+	else
+		echo "${HOME_DIR} doe snot exist or is not a directory." >&2
+		exit 1
+  	fi
   fi
   
   
-  if [[ "${DELETE}" = true ]]
+  if [[ "${DELETE}" = 'true' ]]
   then
-	echo "Deleting user: ${USER}, deleting home dir"
-	userdel --remove ${USER}
-	shift
-	continue
+	userdel ${REMOVE_HOME} ${USER}
+  	if [[ "${?}" -ne 0 ]]
+  	then
+		echo "ERROR deleting user: ${USER}"
+  		exit 1
+ 	fi
+	echo "The account ${USER} was deleted."
+  else
+  	chage -E 0 ${USER}
+  	if [[ "${?}" -ne 0 ]]
+  	then
+		echo "ERROR suspending user: ${USER}"
+  		exit 1
+ 	fi
+	echo "The account ${USER} was suspended."
   fi
-  if [[ "${?}" -ne 0 ]]
-  then
-	echo "ERROR deleting user: ${USER}"
-	shift
-	continue
-  
-  fi
-
-
-  if [[ "$REMOVE_HOME" = true ]]
-  then
-	echo "Removing home dir, user: ${USER}"
-	rm -r /home/${USER}
-  fi
-  if [[ "${?}" -ne 0 ]]
-  then
-	echo "ERROR removing home dir, user: ${USER}"
-	shift
-	continue
-  
-  fi
-
-
-  chage -E0 ${USER}
-  if [[ "${?}" -ne 0 ]]
-  then
-  	echo "Error disabling user: ${USER} account"
-	shift
-	continue
-  fi
-
-  echo "User: ${USER} suspended succesfully."
-  shift 
 done
 
 exit 0
