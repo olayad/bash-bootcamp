@@ -2,6 +2,9 @@
 
 #
 
+SERVERS_FILE='/vagrant/servers'
+
+
 usage() {
   echo 'This script allows a user to execute commands in multiple hosts.'
   echo 'This script should not be run as superuser.'
@@ -26,6 +29,7 @@ log() {
   fi
 }
 
+
 # Enforce that script is NOT being run as sudo
 if [[ "${UID}" -eq 0 ]]
 then
@@ -34,7 +38,6 @@ then
 fi 
 
 
-SERVERS_FILE='/vagrant/servers'
 
 # Process input parameters
 while getopts f:nsv OPTION
@@ -48,18 +51,38 @@ do
   esac
 done
 
+# Remove the options while leaving remaining args.
+shift "$(( OPTIND  - 1 ))"
+if [[ "${#}" -eq 0 ]]
+then 
+  usage
+fi
+
+
 # Check if servers file exists
 log 'Checking if server file exists...' 1
 if  [[ ! -e "${SERVERS_FILE}" ]]
 then
-  log "Servers file could not be accessed." 2
+  log "Servers file could not be opened: ${SERVERS_FILE}" 2
   exit 1
 fi
 
 
 for SERVER in $(cat ${SERVERS_FILE})
 do
-  echo "server: ${SERVER}"
+  MESSAGE="Executing command:"${@}" @:"${SERVER}
+  log "${MESSAGE}" 1
+  if [[ "${SUPERUSER}" = 'true' ]]
+  then
+    sudo ssh ${SERVER} ${@} 2>/dev/null
+  else
+    ssh ${SERVER} ${@} 2>/dev/null
+  fi
+  if [[ "${?}" -ne 0 ]] 
+  then
+     log "Command was not executed succesfully.	${@}@:${SERVER}" 2
+  fi
+  echo
 done
 
 exit 0
